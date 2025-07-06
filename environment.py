@@ -1,6 +1,6 @@
 from dolphin import event, gui, controller, savestate, memory
 from controller import Controller
-from constants import MARIO_LIVES_ADDR, SAVE_STATE_FILE, SKIP_FRAMES, MARIO_POSITION_ADDR
+from constants import MARIO_LIVES_ADDR, SAVE_STATE_FILE, SKIP_FRAMES, MARIO_POSITION_ADDR, ACTIONS
 from PIL import Image
 import numpy as np
 import random
@@ -39,7 +39,7 @@ class MarioEnvironment:
             img = self.get_frame(width, height, data)
             self.currentState.append(img)
 
-        self.totalStates.append([self.currentState[:], action])
+        self.totalStates.append(self.currentState[:])
         self.currentState = []
         # Check if Mario is dead
         reward = self.compute_reward()
@@ -51,30 +51,16 @@ class MarioEnvironment:
         
         return done
 
-
-    def random_state(self):
-        randomState = random.choice(self.totalStates)
-        for img in randomState[0]:
-            img.show()
-
-    def take_action(self, action):
+    def take_action(self, action_index):
         """Execute the action in the game"""
         self.controller.reset_buttons()
 
-        if action == "left":
-            self.controller.set_button("Left", True)
-        elif action == "right":
-            self.controller.set_button("Right", True)
-        elif action == "jump":
-            self.controller.set_button("A", True)
-        elif action == "jump_left":
-            self.controller.set_button("Left", True)
-            self.controller.set_button("A", True)
-        elif action == "jump_right":
-            self.controller.set_button("Right", True)
-            self.controller.set_button("A", True)
-        elif action == "nothing":
+        if action_index == 0:
             self.controller.reset_buttons()
+        else:
+            for buttons in ACTIONS[action_index]:
+                self.controller.set_button(buttons, True)
+
 
 
     def get_frame(self, width, height, data):
@@ -83,13 +69,14 @@ class MarioEnvironment:
         rgb_array = np.frombuffer(data, dtype=np.uint8).reshape((height, width, 3))
         image = Image.fromarray(rgb_array, mode='RGB')
 
-        # Convert to grayscale
-        gray_image = image.convert('L')
+        # Convert to grayscale and resize to 210x112
+        gray_image = image.convert('L').resize((210, 112), Image.BILINEAR)
 
-        # Resize to desired input shape for the model
-        resized_image = gray_image.resize((224, 224), Image.BILINEAR)
+        # Convert to a 2D list
+        pixel_list = list(gray_image.getdata())
+        pixel_2d_list = [pixel_list[i * 210:(i + 1) * 210] for i in range(112)]
         
-        return resized_image
+        return pixel_2d_list
 
 
     def compute_reward(self):
@@ -106,4 +93,4 @@ class MarioEnvironment:
 
     def sample_action(self):
         """TODO (TEMP): Sample a random action from the action space"""
-        return random.choice(self.actions)
+        return random.randint(0, len(ACTIONS) - 1)

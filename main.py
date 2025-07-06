@@ -55,7 +55,7 @@ while True:
     await event.frameadvance()
     
     action = env.sample_action()
-    done = await env.step("nothing")
+    done = await env.step(action)
 
     if done:
         # Take a random state from the total states
