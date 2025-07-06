@@ -1,15 +1,15 @@
 print("Script Started!")
-from dolphin import event
+from dolphin import event, memory
 import sys
 import os
 import traceback
 import inspect
 import time
+from constants import MARIO_POSITION_ADDR
 from pathlib import Path
 
 
-currentFrame = 0
-skipFrame = 3
+currentStep = 0
 currentState = []
 totalStates = []
 totalSteps = 120
@@ -46,41 +46,23 @@ env = MarioEnvironment(controller)
 await event.frameadvance()
 env.reset()
 
-frame_count = 0
-MAX_FRAMES = 5  # Limit to 5 frames
-
-def show_limited_frames(width: int, height: int, data: bytes):
-    # Convert raw bytes to NumPy array
-    rgb_array = np.frombuffer(data, dtype=np.uint8).reshape((height, width, 3))
-
-    img = Image.fromarray(rgb_array, mode='RGB').convert('L')
-
-    currentState.append(img)
-
-#event.on_framedrawn(show_limited_frames)
-
 # Main loop
 for _ in range(50):
     await event.frameadvance()
+
 
 while True:
     await event.frameadvance()
     
     action = env.sample_action()
-    done = await env.step(action)
-    
-    currentFrame+=1  # Reset step after each action
-    print(currentFrame)
-    if currentFrame >= totalSteps:
-        print("Reached maximum steps, resetting environment...")
-        env.random_state()
-        env.reset()
-        currentFrame = 0
+    done = await env.step("nothing")
+
     if done:
         # Take a random state from the total states
-        env.random_state()
+        #env.random_state()
 
         print("Mario is dead, resetting environment...")
+        print(f"Total Reward: {env.totalReward}")
         env.reset()
     
     

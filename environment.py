@@ -1,6 +1,6 @@
 from dolphin import event, gui, controller, savestate, memory
 from controller import Controller
-from constants import MARIO_LIVES_ADDR, SAVE_STATE_FILE, SKIP_FRAMES
+from constants import MARIO_LIVES_ADDR, SAVE_STATE_FILE, SKIP_FRAMES, MARIO_POSITION_ADDR
 from PIL import Image
 import numpy as np
 import random
@@ -12,9 +12,15 @@ class MarioEnvironment:
         self.controller = controller
         self.currentState = []
         self.totalStates = []
+        self.marioPosition = 760
+        self.totalReward = 0
 
     def reset(self):
         """TODO: Reset the game using savestates"""
+        self.totalStates = []
+        self.currentState = []
+        self.marioPosition = 760
+        self.totalReward = 0
         savestate.load_from_file(SAVE_STATE_FILE)
 
     async def step(self, action):
@@ -29,16 +35,20 @@ class MarioEnvironment:
 
             width, height, data = await event.framedrawn()
 
-            rgb_array = np.frombuffer(data, dtype=np.uint8).reshape((height, width, 3))
-
-            img = Image.fromarray(rgb_array, mode='RGB').convert('L')
+            
+            img = self.get_frame(width, height, data)
             self.currentState.append(img)
 
         self.totalStates.append([self.currentState[:], action])
         self.currentState = []
         # Check if Mario is dead
-        done = self.check_death()
+        reward = self.compute_reward()
+        self.totalReward += reward
 
+        done = self.check_death()
+        if done:
+            self.totalReward -= 10;
+        
         return done
 
 
@@ -67,9 +77,27 @@ class MarioEnvironment:
             self.controller.reset_buttons()
 
 
-    def get_frame(self):
+    def get_frame(self, width, height, data):
         """TODO: Capture the current frame from the game"""
-        pass
+
+        rgb_array = np.frombuffer(data, dtype=np.uint8).reshape((height, width, 3))
+        image = Image.fromarray(rgb_array, mode='RGB')
+
+        # Convert to grayscale
+        gray_image = image.convert('L')
+
+        # Resize to desired input shape for the model
+        resized_image = gray_image.resize((224, 224), Image.BILINEAR)
+        
+        return resized_image
+
+
+    def compute_reward(self):
+        newMarioPosition = memory.read_f32(MARIO_POSITION_ADDR)
+        reward = (newMarioPosition - self.marioPosition) * 0.1
+        self.marioPosition = newMarioPosition
+        return reward
+
 
     def check_death(self):
         """Check if Mario is dead by reading memory"""
