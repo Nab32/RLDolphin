@@ -11,17 +11,26 @@ class MarioEnvironment:
         self.actions = ["left", "right", "jump", "jump_left", "jump_right", "nothing"]
         self.controller = controller
         self.currentState = []
-        self.totalStates = []
         self.marioPosition = 760
         self.totalReward = 0
 
-    def reset(self):
+    async def reset(self):
         """TODO: Reset the game using savestates"""
-        self.totalStates = []
         self.currentState = []
         self.marioPosition = 760
         self.totalReward = 0
         savestate.load_from_file(SAVE_STATE_FILE)
+        for _ in range(0, 30):
+            await event.frameadvance()
+        for _ in range(0, SKIP_FRAMES):
+            width, height, data = await event.framedrawn()
+
+            img = self.get_frame(width, height, data)
+            self.currentState.append(img)
+
+        newState = np.stack(self.currentState, axis=0)
+        self.currentState = []
+        return newState
 
     async def step(self, action):
         """TODO: Execute the action in the game"""
@@ -30,17 +39,11 @@ class MarioEnvironment:
 
         for _ in range(0, SKIP_FRAMES):
             # Advance the game frame
-
             self.controller.apply_buttons()
-
             width, height, data = await event.framedrawn()
-
-            
             img = self.get_frame(width, height, data)
             self.currentState.append(img)
 
-        self.totalStates.append(self.currentState[:])
-        self.currentState = []
         # Check if Mario is dead
         reward = self.compute_reward()
         self.totalReward += reward
@@ -48,8 +51,12 @@ class MarioEnvironment:
         done = self.check_death()
         if done:
             self.totalReward -= 10;
+            reward -= 10
         
-        return done
+        next_state = np.stack(self.currentState, axis=0)
+        self.currentState = []
+        
+        return next_state, reward, done
 
     def take_action(self, action_index):
         """Execute the action in the game"""
@@ -69,14 +76,9 @@ class MarioEnvironment:
         rgb_array = np.frombuffer(data, dtype=np.uint8).reshape((height, width, 3))
         image = Image.fromarray(rgb_array, mode='RGB')
 
-        # Convert to grayscale and resize to 210x112
-        gray_image = image.convert('L').resize((210, 112), Image.BILINEAR)
-
-        # Convert to a 2D list
-        pixel_list = list(gray_image.getdata())
-        pixel_2d_list = [pixel_list[i * 210:(i + 1) * 210] for i in range(112)]
-        
-        return pixel_2d_list
+        gray_image = image.convert('L').resize((210, 210), Image.BILINEAR)
+        frame = np.array(gray_image, dtype=np.float32) / 255.0  # Normalize to [0, 1]
+        return frame
 
 
     def compute_reward(self):
